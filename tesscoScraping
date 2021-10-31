@@ -1,0 +1,114 @@
+import time
+#Need Selenium for interacting with web elements
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
+
+#Need numpy/pandas to interact with large datasets
+import numpy as np
+import pandas as pd
+import itertools
+
+
+# load in manufacture part number from a collection of components, via an Excel file
+mfg_id_list = pd.read_excel("C:/Users/James/Documents/Python Scripts/jupyterNoteBooks/ScrapingData/MasterQuoteTemplate.xls")['Model']
+
+# create a dictionary to store product and price
+productInfo = {}
+
+chrome_path = r"C:\Users\James\Documents\Python Scripts\jupyterNoteBooks\ScrapingData\chromedriver_win32\chromedriver.exe"
+driver = webdriver.Chrome(chrome_path)
+driver.maximize_window()
+driver.get("https://www.tessco.com/login")
+
+userName = "ryan.drobinske@csquaredsystems.com"
+password = "Csquared1"
+
+#Set a wait, for elements to load into the DOM
+wait10 = WebDriverWait(driver, 10)
+wait20 = WebDriverWait(driver, 20)
+wait30 = WebDriverWait(driver, 30)
+
+elem = wait10.until(EC.element_to_be_clickable((By.ID, "userID"))) 
+elem.send_keys(userName)
+
+elem = wait10.until(EC.element_to_be_clickable((By.ID, "password"))) 
+elem.send_keys(password)
+
+#Press the login button
+driver.find_element_by_xpath("/html/body/account-login/div/div[1]/form/div[6]/div/button").click()
+
+for i in mfg_id_list:
+
+    #Expand the search bar
+    searchBar = wait10.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#searchBar input")))
+
+    #Enter information into the search bar
+    #If cell is not blank
+
+    if len(str(i)) != 0:
+        searchBar.send_keys(Keys.CONTROL, 'a')
+        searchBar.send_keys(i)
+        driver.find_element_by_css_selector('a.inputButton').click()
+        time.sleep(5)
+
+        try:
+            # wait for the products information to be loaded
+            products = wait10.until(EC.presence_of_all_elements_located((By.XPATH,"//div[@class='CoveoResult']")))
+            #isProductsThere = driver.find_element_by_xpath("//div[@class='CoveoResult']")
+
+            if products:
+                # iterate through all products in the search result and add details to dictionary
+                for product in products:
+
+                    # get product info such as OEM, Description and Part Number
+                    productDescr = product.find_element_by_xpath(".//a[@class='productName CoveoResultLink hidden-xs']").text
+                    mfgPart = product.find_element_by_xpath(".//ul[@class='unlisted info']").text.split('\n')[3]
+                    mfgName = product.find_element_by_tag_name("img").get_attribute("alt")
+
+                    # There are multiple classes, some are "class sale" or else.
+                    #We will locate by CSS
+                    price = product.find_element_by_css_selector("div.price").text.split('\n')[1]
+
+
+                    # add details to dictionary
+                    productInfo[mfgPart, mfgName, productDescr] = price
+
+                # prints the searched products information   
+                for (mfg_part, mfg_OEM, description), price in productInfo.items():
+                    mfg_id = mfg_part.split(': ')[1]
+                    if mfg_id == i:
+                        print('________________________________________________')
+                        print('Part #:', mfg_id)
+                        print('Company:', mfg_OEM)
+                        print('Description:', description)
+                        print('Price:', price)
+                        print('________________________________________________')
+
+
+                #time.sleep(5)
+                #driver.close()
+
+            else:
+                mfg_id = "Not on Tessco"
+                mfg_OEM = "Not on Tessco"
+                description = "Not on Tessco"
+                price = "Not on Tessco"
+                #driver.close()
+                print("Item was not found on Tessco.com")
+
+
+        except Exception as e:
+            print('________________________________________________')            
+            print(e)
+            mfg_id = "Not on Tessco"
+            mfg_OEM = "Not on Tessco"
+            description = "Not on Tessco"
+            price = "Not on Tessco"
+            #driver.close()
+            print("Item was not found on Tessco.com")
+            print('________________________________________________')
+
+driver.close()
